@@ -1,1 +1,1 @@
-include ':multiline-collapsingtoolbar', ':demo'
+include ':multiline-collapsingtoolbar'
