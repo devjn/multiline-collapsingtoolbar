@@ -27,6 +27,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.support.annotation.ColorInt;
+import android.support.v4.math.MathUtils;
 import android.support.v4.text.TextDirectionHeuristicsCompat;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.view.ViewCompat;
@@ -119,6 +120,8 @@ final class CollapsingTextHelper {
     private float mExpandedTextBlend;
     private float mExpandedFirstLineDrawX;
     private int maxLines = 3;
+    private float lineSpacingExtra = 0;
+    private float lineSpacingMultiplier = 1;
     // END MODIFICATION
 
     public CollapsingTextHelper(View view) {
@@ -284,6 +287,32 @@ final class CollapsingTextHelper {
     }
     // END MODIFICATION
 
+    // BEGIN MODIFICATION: getter and setter methods for line spacing
+    void setLineSpacingExtra(float lineSpacingExtra) {
+        if (lineSpacingExtra != this.lineSpacingExtra) {
+            this.lineSpacingExtra = lineSpacingExtra;
+            clearTexture();
+            recalculate();
+        }
+    }
+
+    float getLineSpacingExtra() {
+        return lineSpacingExtra;
+    }
+
+    void setLineSpacingMultiplier(float lineSpacingMultiplier) {
+        if (lineSpacingMultiplier != this.lineSpacingMultiplier) {
+            this.lineSpacingMultiplier = lineSpacingMultiplier;
+            clearTexture();
+            recalculate();
+        }
+    }
+
+    float getLineSpacingMultiplier() {
+        return lineSpacingMultiplier;
+    }
+    // END MODIFICATION
+
     private Typeface readFontFamilyTypeface(int resId) {
         final TypedArray a = mView.getContext().obtainStyledAttributes(resId,
                 new int[]{android.R.attr.fontFamily});
@@ -299,14 +328,14 @@ final class CollapsingTextHelper {
     }
 
     void setCollapsedTypeface(Typeface typeface) {
-        if (mCollapsedTypeface != typeface) {
+        if (areTypefacesDifferent(mCollapsedTypeface, typeface)) {
             mCollapsedTypeface = typeface;
             recalculate();
         }
     }
 
     void setExpandedTypeface(Typeface typeface) {
-        if (mExpandedTypeface != typeface) {
+        if (areTypefacesDifferent(mExpandedTypeface, typeface)) {
             mExpandedTypeface = typeface;
             recalculate();
         }
@@ -333,7 +362,7 @@ final class CollapsingTextHelper {
      * A value of {@code 1.0} indicates that the layout is fully collapsed.
      */
     void setExpansionFraction(float fraction) {
-        fraction = MathUtils.constrain(fraction, 0f, 1f);
+        fraction = MathUtils.clamp(fraction, 0f, 1f);
 
         if (fraction != mExpandedFraction) {
             mExpandedFraction = fraction;
@@ -587,10 +616,16 @@ final class CollapsingTextHelper {
                 mTextPaint.setAlpha((int) (mCollapsedTextBlend * 255));
                 canvas.drawText(mTextToDrawCollapsed, 0, mTextToDrawCollapsed.length(), 0,
                         -ascent / mScale, mTextPaint);
+                // BEGIN MODIFICATION
+                // Remove ellipsis for Cross-section animation
+                String tmp = mTextToDrawCollapsed.toString().trim();
+                if (tmp.endsWith("\u2026")) {
+                    tmp = tmp.substring(0, tmp.length() - 1);
+                }
                 // Cross-section between both texts (should stay at alpha = 255)
                 mTextPaint.setAlpha(255);
-                canvas.drawText(mTextToDraw, mTextLayout.getLineStart(0),
-                        mTextLayout.getLineEnd(0), 0, -ascent / mScale, mTextPaint);
+                canvas.drawText(tmp, 0, mTextLayout.getLineEnd(0) <= tmp.length() ? mTextLayout.getLineEnd(0) : tmp.length(), 0, -ascent / mScale, mTextPaint);
+                // END MODIFICATION
             }
             // END MODIFICATION
         }
@@ -632,6 +667,10 @@ final class CollapsingTextHelper {
     }
     // END MODIFICATION
 
+    private boolean areTypefacesDifferent(Typeface first, Typeface second) {
+        return (first != null && !first.equals(second)) || (first == null && second != null);
+    }
+
     private void calculateUsingTextSize(final float textSize) {
         if (mText == null) return;
 
@@ -647,7 +686,7 @@ final class CollapsingTextHelper {
         if (isClose(textSize, mCollapsedTextSize)) {
             newTextSize = mCollapsedTextSize;
             mScale = 1f;
-            if (mCurrentTypeface != mCollapsedTypeface) {
+            if (areTypefacesDifferent(mCurrentTypeface, mCollapsedTypeface)) {
                 mCurrentTypeface = mCollapsedTypeface;
                 updateDrawText = true;
             }
@@ -657,7 +696,7 @@ final class CollapsingTextHelper {
             // END MODIFICATION
         } else {
             newTextSize = mExpandedTextSize;
-            if (mCurrentTypeface != mExpandedTypeface) {
+            if (areTypefacesDifferent(mCurrentTypeface, mExpandedTypeface)) {
                 mCurrentTypeface = mExpandedTypeface;
                 updateDrawText = true;
             }
@@ -677,7 +716,10 @@ final class CollapsingTextHelper {
                 // If the scaled down size is larger than the actual collapsed width, we need to
                 // cap the available width so that when the expanded text scales down, it matches
                 // the collapsed width
-                availableWidth = Math.min(collapsedWidth / textSizeRatio, expandedWidth);
+
+                // BEGIN MODIFICATION:
+                availableWidth = expandedWidth;
+                // END MODIFICATION
             } else {
                 // Otherwise we'll just use the expanded width
                 availableWidth = expandedWidth;
@@ -698,7 +740,7 @@ final class CollapsingTextHelper {
 
             // BEGIN MODIFICATION: Text layout creation and text truncation
             StaticLayout layout = new StaticLayout(mText, mTextPaint, (int) availableWidth,
-                    Layout.Alignment.ALIGN_NORMAL, 1, 0, false);
+                    Layout.Alignment.ALIGN_NORMAL, lineSpacingMultiplier, lineSpacingExtra, false);
             CharSequence truncatedText;
             if (layout.getLineCount() > maxLines) {
                 int lastLine = maxLines - 1;
@@ -746,7 +788,7 @@ final class CollapsingTextHelper {
             }
 
             mTextLayout = new StaticLayout(mTextToDraw, mTextPaint, (int) availableWidth,
-                alignment, 1, 0, false);
+                alignment, lineSpacingMultiplier, lineSpacingExtra, false);
             // END MODIFICATION
         }
     }
@@ -815,8 +857,12 @@ final class CollapsingTextHelper {
         }
         mCrossSectionTitleTexture = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(mCrossSectionTitleTexture);
-        c.drawText(mTextToDraw, mTextLayout.getLineStart(0),
-                mTextLayout.getLineEnd(0), 0, -mTextPaint.ascent() / mScale, mTextPaint);
+        String tmp = mTextToDrawCollapsed.toString().trim();
+        if (tmp.endsWith("\u2026")) {
+            tmp = tmp.substring(0, tmp.length() - 1);
+        }
+        c.drawText(tmp, 0,
+                mTextLayout.getLineEnd(0) <= tmp.length() ? mTextLayout.getLineEnd(0) : tmp.length(), 0, -mTextPaint.ascent() / mScale, mTextPaint);
         if (mTexturePaint == null) {
             // Make sure we have a paint
             mTexturePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
