@@ -16,8 +16,6 @@
 
 package net.opacapp.multilinecollapsingtoolbar;
 
-import static android.support.annotation.RestrictTo.Scope.LIBRARY_GROUP;
-
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -56,6 +54,8 @@ import android.widget.FrameLayout;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+import static android.support.annotation.RestrictTo.Scope.LIBRARY_GROUP;
 
 /**
  * CollapsingToolbarLayout is a wrapper for {@link Toolbar} which implements a collapsing app bar.
@@ -300,7 +300,7 @@ public class CollapsingToolbarLayout extends FrameLayout {
         final ViewParent parent = getParent();
         if (parent instanceof AppBarLayout) {
             // Copy over from the ABL whether we should fit system windows
-            ViewCompat.setFitsSystemWindows(this, ViewCompat.getFitsSystemWindows((View) parent));
+            setFitsSystemWindows(ViewCompat.getFitsSystemWindows((View) parent));
 
             if (mOnOffsetChangedListener == null) {
                 mOnOffsetChangedListener = new OffsetUpdateListener();
@@ -339,7 +339,7 @@ public class CollapsingToolbarLayout extends FrameLayout {
 
         // Consume the insets. This is done so that child views with fitSystemWindows=true do not
         // get the default padding functionality from View
-        return insets.consumeSystemWindowInsets();
+        return insets;
     }
 
     @Override
